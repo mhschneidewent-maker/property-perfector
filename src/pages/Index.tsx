@@ -6,6 +6,7 @@ import { BeforeAfter } from "@/components/BeforeAfter";
 import { ENHANCEMENTS, type EnhancementKey } from "@/lib/enhancements";
 import beforeImg from "@/assets/hero-before.jpg";
 import afterImg from "@/assets/hero-twilight.jpg";
+import logoFull from "@/assets/freeze-media-logo.png";
 
 import skyBefore from "@/assets/ex-sky-before.jpg";
 import skyAfter from "@/assets/ex-sky-after.jpg";
@@ -43,6 +44,11 @@ const Index = () => {
         <div className="absolute inset-0 grid-bg opacity-40" aria-hidden />
         <div className="container relative grid gap-12 py-20 lg:grid-cols-2 lg:gap-16 lg:py-28">
           <div className="flex flex-col justify-center animate-float-up">
+            <img
+              src={logoFull}
+              alt="Freeze Media"
+              className="mb-8 h-20 w-auto object-contain object-left drop-shadow-[0_0_30px_hsl(var(--aqua)/0.45)] md:h-24"
+            />
             <span className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-aqua/30 bg-aqua/10 px-3 py-1 text-xs font-medium uppercase tracking-wider text-aqua">
               <span className="h-1.5 w-1.5 rounded-full bg-aqua animate-pulse" />
               AI photo enhancement for realtors
