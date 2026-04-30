@@ -10,8 +10,8 @@ export const SiteHeader = () => {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/70 backdrop-blur-xl">
-      <div className="container flex h-16 items-center justify-between">
-        <Logo />
+      <div className="container flex h-20 items-center justify-between">
+        <Logo size="md" />
         <nav className="flex items-center gap-2">
           {user ? (
             <>
