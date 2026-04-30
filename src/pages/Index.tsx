@@ -6,7 +6,7 @@ import { BeforeAfter } from "@/components/BeforeAfter";
 import { ENHANCEMENTS, type EnhancementKey } from "@/lib/enhancements";
 import beforeImg from "@/assets/hero-before.jpg";
 import afterImg from "@/assets/hero-twilight.jpg";
-import logoFull from "@/assets/freeze-media-logo-transparent.png";
+
 
 import skyBefore from "@/assets/ex-sky-before.jpg";
 import skyAfter from "@/assets/ex-sky-after.jpg";
