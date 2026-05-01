@@ -1,21 +1,53 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { SiteHeader } from "@/components/SiteHeader";
 import { BeforeAfter } from "@/components/BeforeAfter";
 import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ENHANCEMENTS, EnhancementKey } from "@/lib/enhancements";
 import { ArrowLeft, Download, Loader2, Sparkles, Upload } from "lucide-react";
 import { toast } from "sonner";
 
-const MAX_BYTES = 15 * 1024 * 1024; // 15 MB
+const MAX_BYTES = 15 * 1024 * 1024;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
+const PRICE_PER_VARIATION_USD = 0.20;
+
+const STAGING_STYLES = [
+  { key: "modern", label: "Modern" },
+  { key: "scandinavian", label: "Scandinavian" },
+  { key: "midcentury", label: "Mid-century Modern" },
+  { key: "farmhouse", label: "Farmhouse" },
+  { key: "luxury", label: "Luxury" },
+  { key: "industrial", label: "Industrial" },
+  { key: "coastal", label: "Coastal" },
+  { key: "minimalist", label: "Minimalist" },
+];
+const STAGING_ROOMS = [
+  { key: "living", label: "Living Room" },
+  { key: "bedroom", label: "Bedroom" },
+  { key: "kitchen", label: "Kitchen" },
+  { key: "dining", label: "Dining Room" },
+  { key: "office", label: "Home Office" },
+  { key: "bathroom", label: "Bathroom" },
+  { key: "kids", label: "Kids Room" },
+  { key: "outdoor", label: "Outdoor / Patio" },
+];
 
 type Project = {
   id: string; user_id: string; title: string | null;
   enhancement_type: string; status: string;
   original_path: string; enhanced_path: string | null; error_message: string | null;
+  style?: string | null; room_type?: string | null; prompt?: string | null;
+  num_variations?: number | null; provider?: string | null;
+};
+type StagingResult = {
+  id: string; project_id: string; image_path: string; variation_index: number; provider: string;
+  url?: string;
 };
 
 const Studio = () => {
@@ -32,7 +64,20 @@ const Studio = () => {
   const [enhancedUrl, setEnhancedUrl] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
-  // Load existing project if id provided
+  // Decor8 staging controls
+  const [style, setStyle] = useState("modern");
+  const [roomType, setRoomType] = useState("living");
+  const [prompt, setPrompt] = useState("");
+  const [numVariations, setNumVariations] = useState(3);
+  const [stagingResults, setStagingResults] = useState<StagingResult[]>([]);
+
+  const isStaging = enhancement === "virtual_stage";
+  const estimatedCostUsd = useMemo(
+    () => (numVariations * PRICE_PER_VARIATION_USD).toFixed(2),
+    [numVariations]
+  );
+
+  // Load existing project
   useEffect(() => {
     if (!projectId || !user) return;
     let ignore = false;
@@ -41,17 +86,38 @@ const Studio = () => {
       if (error || !data || ignore) return;
       setProject(data as Project);
       setEnhancement(data.enhancement_type as EnhancementKey);
+      if (data.style) setStyle(data.style);
+      if (data.room_type) setRoomType(data.room_type);
+      if (data.prompt) setPrompt(data.prompt);
+      if (data.num_variations) setNumVariations(data.num_variations);
       const { data: o } = await supabase.storage.from("photos").createSignedUrl(data.original_path, 3600);
       setOriginalUrl(o?.signedUrl ?? null);
       if (data.enhanced_path) {
         const { data: e } = await supabase.storage.from("photos").createSignedUrl(data.enhanced_path, 3600);
         setEnhancedUrl(e?.signedUrl ?? null);
       }
+      await loadStagingResults(data.id);
     })();
     return () => { ignore = true; };
   }, [projectId, user]);
 
-  // Realtime updates while processing
+  const loadStagingResults = async (pid: string) => {
+    const { data } = await supabase
+      .from("staging_results")
+      .select("*")
+      .eq("project_id", pid)
+      .order("variation_index", { ascending: true });
+    if (!data) return setStagingResults([]);
+    const withUrls = await Promise.all(
+      (data as StagingResult[]).map(async (r) => {
+        const { data: s } = await supabase.storage.from("photos").createSignedUrl(r.image_path, 3600);
+        return { ...r, url: s?.signedUrl ?? undefined };
+      })
+    );
+    setStagingResults(withUrls);
+  };
+
+  // Realtime: project status + staging results
   useEffect(() => {
     if (!project || !user) return;
     const ch = supabase
@@ -59,15 +125,21 @@ const Studio = () => {
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "projects", filter: `id=eq.${project.id}` }, async (payload) => {
         const next = payload.new as Project;
         setProject(next);
-        if (next.status === "done" && next.enhanced_path) {
-          const { data } = await supabase.storage.from("photos").createSignedUrl(next.enhanced_path, 3600);
-          setEnhancedUrl(data?.signedUrl ?? null);
+        if (next.status === "done") {
+          if (next.enhanced_path) {
+            const { data } = await supabase.storage.from("photos").createSignedUrl(next.enhanced_path, 3600);
+            setEnhancedUrl(data?.signedUrl ?? null);
+          }
+          await loadStagingResults(next.id);
           setWorking(false);
-          toast.success("Enhancement ready!");
+          toast.success("Your enhancement is ready!");
         } else if (next.status === "failed") {
           setWorking(false);
           toast.error(next.error_message ?? "Enhancement failed");
         }
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "staging_results", filter: `project_id=eq.${project.id}` }, () => {
+        loadStagingResults(project.id);
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -79,7 +151,7 @@ const Studio = () => {
     if (f.size > MAX_BYTES) { toast.error("Max 15 MB"); return; }
     setFile(f);
     setPreviewUrl(URL.createObjectURL(f));
-    setProject(null); setOriginalUrl(null); setEnhancedUrl(null);
+    setProject(null); setOriginalUrl(null); setEnhancedUrl(null); setStagingResults([]);
   };
 
   const startEnhance = async () => {
@@ -88,6 +160,10 @@ const Studio = () => {
     setWorking(true);
     try {
       let proj = project;
+      const stagingFields = isStaging
+        ? { style, room_type: roomType, prompt: prompt.trim() || null, num_variations: numVariations, provider: "decor8" }
+        : { provider: "lovable" };
+
       if (!proj && file) {
         const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
         const id = crypto.randomUUID();
@@ -96,7 +172,7 @@ const Studio = () => {
         if (upErr) throw upErr;
         const { data, error } = await supabase
           .from("projects")
-          .insert({ user_id: user.id, original_path: path, enhancement_type: enhancement, status: "processing" })
+          .insert({ user_id: user.id, original_path: path, enhancement_type: enhancement, status: "processing", ...stagingFields })
           .select("*")
           .single();
         if (error) throw error;
@@ -105,15 +181,20 @@ const Studio = () => {
         const { data: signed } = await supabase.storage.from("photos").createSignedUrl(path, 3600);
         setOriginalUrl(signed?.signedUrl ?? null);
         navigate(`/studio?project=${proj.id}`, { replace: true });
-      } else if (proj && proj.enhancement_type !== enhancement) {
-        // Re-run with a different enhancement
-        await supabase.from("projects").update({ enhancement_type: enhancement, status: "processing", enhanced_path: null, error_message: null }).eq("id", proj.id);
-        setEnhancedUrl(null);
       } else if (proj) {
-        await supabase.from("projects").update({ status: "processing", error_message: null }).eq("id", proj.id);
+        await supabase.from("projects").update({
+          enhancement_type: enhancement,
+          status: "processing",
+          enhanced_path: null,
+          error_message: null,
+          ...stagingFields,
+        }).eq("id", proj.id);
+        setEnhancedUrl(null);
+        setStagingResults([]);
       }
 
-      const { error: fnErr } = await supabase.functions.invoke("enhance-photo", { body: { projectId: proj!.id } });
+      const fnName = isStaging ? "decor8-stage" : "enhance-photo";
+      const { error: fnErr } = await supabase.functions.invoke(fnName, { body: { projectId: proj!.id } });
       if (fnErr) throw fnErr;
     } catch (err: any) {
       setWorking(false);
@@ -123,6 +204,7 @@ const Studio = () => {
 
   const isProcessing = working || project?.status === "processing";
   const beforeSrc = originalUrl || previewUrl;
+  const showStagingGallery = isStaging && stagingResults.length > 0;
 
   return (
     <div className="min-h-screen bg-hero">
@@ -132,10 +214,41 @@ const Studio = () => {
           <Link to="/dashboard"><ArrowLeft className="mr-1 h-4 w-4" />Back to dashboard</Link>
         </Button>
 
-        <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-          {/* Preview */}
+        <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
+          {/* Preview / Gallery */}
           <div className="rounded-2xl border border-border bg-gradient-card p-4 shadow-card">
-            {beforeSrc && enhancedUrl ? (
+            {showStagingGallery && beforeSrc ? (
+              <div className="space-y-4">
+                <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-muted">
+                  <img src={beforeSrc} alt="Original" className="h-full w-full object-cover" />
+                  <span className="absolute left-3 top-3 rounded-md bg-background/70 px-2 py-1 text-xs backdrop-blur">Before</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {stagingResults.map((r) => (
+                    <div key={r.id} className="group relative overflow-hidden rounded-xl border border-border bg-muted">
+                      {r.url ? (
+                        <img src={r.url} alt={`Variation ${r.variation_index + 1}`} className="aspect-[4/3] w-full object-cover" />
+                      ) : (
+                        <div className="aspect-[4/3] grid place-items-center text-muted-foreground text-sm">Loading…</div>
+                      )}
+                      <div className="absolute left-2 top-2 rounded-md bg-background/70 px-2 py-0.5 text-xs backdrop-blur">
+                        Variation {r.variation_index + 1}
+                      </div>
+                      {r.url && (
+                        <a
+                          href={r.url}
+                          download={`curbapp-stage-${r.variation_index + 1}.jpg`}
+                          className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-md bg-background/70 backdrop-blur opacity-0 transition-opacity group-hover:opacity-100"
+                          aria-label="Download"
+                        >
+                          <Download className="h-4 w-4" />
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : beforeSrc && enhancedUrl ? (
               <BeforeAfter beforeSrc={beforeSrc} afterSrc={enhancedUrl} className="aspect-[4/3]" afterLabel={ENHANCEMENTS.find(e => e.key === enhancement)?.label ?? "After"} />
             ) : beforeSrc ? (
               <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-muted">
@@ -147,8 +260,8 @@ const Studio = () => {
                         <div className="absolute inset-0 animate-spin rounded-full border-2 border-aqua border-t-transparent" />
                         <Sparkles className="absolute inset-0 m-auto h-6 w-6 text-aqua" />
                       </div>
-                      <p className="font-display text-lg">Enhancing your photo…</p>
-                      <p className="text-sm text-muted-foreground">Usually 10–30 seconds</p>
+                      <p className="font-display text-lg">{isStaging ? "Staging your room…" : "Enhancing your photo…"}</p>
+                      <p className="text-sm text-muted-foreground">{isStaging ? "Generating variations — 30–60 seconds" : "Usually 10–30 seconds"}</p>
                     </div>
                   </div>
                 )}
@@ -169,10 +282,10 @@ const Studio = () => {
               </label>
             )}
 
-            {enhancedUrl && (
+            {!isStaging && enhancedUrl && (
               <div className="mt-4 flex justify-end">
                 <Button variant="glass" asChild>
-                  <a href={enhancedUrl} download={`skylineedit-${project?.id ?? "enhanced"}.png`}>
+                  <a href={enhancedUrl} download={`curbapp-${project?.id ?? "enhanced"}.png`}>
                     <Download className="mr-2 h-4 w-4" /> Download enhanced
                   </a>
                 </Button>
@@ -211,8 +324,66 @@ const Studio = () => {
               })}
             </div>
 
+            {isStaging && (
+              <div className="mt-6 space-y-4 rounded-xl border border-aqua/30 bg-aqua/5 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-aqua">Decor8 AI staging</p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Room type</Label>
+                    <Select value={roomType} onValueChange={setRoomType} disabled={isProcessing}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {STAGING_ROOMS.map((r) => <SelectItem key={r.key} value={r.key}>{r.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Design style</Label>
+                    <Select value={style} onValueChange={setStyle} disabled={isProcessing}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {STAGING_STYLES.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-xs">Custom direction (optional)</Label>
+                  <Textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    disabled={isProcessing}
+                    placeholder="e.g. warm wood tones, leather sofa, plants by the window"
+                    className="mt-1 min-h-[70px] text-sm"
+                    maxLength={500}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Variations</Label>
+                    <span className="text-xs font-medium">{numVariations}</span>
+                  </div>
+                  <Slider
+                    value={[numVariations]}
+                    onValueChange={(v) => setNumVariations(v[0])}
+                    min={1} max={4} step={1}
+                    disabled={isProcessing}
+                    className="mt-2"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background/40 px-3 py-2">
+                  <span className="text-xs text-muted-foreground">Estimated cost</span>
+                  <span className="font-display text-base font-semibold text-aqua">~${estimatedCostUsd}</span>
+                </div>
+              </div>
+            )}
+
             <Button variant="hero" size="lg" className="mt-6 w-full" onClick={startEnhance} disabled={isProcessing || (!file && !project)}>
-              {isProcessing ? <><Loader2 className="h-4 w-4 animate-spin" /> Enhancing…</> : <><Sparkles className="h-4 w-4" /> Run enhancement</>}
+              {isProcessing ? <><Loader2 className="h-4 w-4 animate-spin" /> {isStaging ? "Staging…" : "Enhancing…"}</> : <><Sparkles className="h-4 w-4" /> {isStaging ? `Generate ${numVariations} variation${numVariations > 1 ? "s" : ""}` : "Run enhancement"}</>}
             </Button>
             {project?.status === "failed" && project.error_message && (
               <p className="mt-3 text-sm text-destructive">{project.error_message}</p>
