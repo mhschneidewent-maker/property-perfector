@@ -286,7 +286,7 @@ const Studio = () => {
               </label>
             )}
 
-            {!isStaging && enhancedUrl && (
+            {!isDecor8 && enhancedUrl && (
               <div className="mt-4 flex justify-end">
                 <Button variant="glass" asChild>
                   <a href={enhancedUrl} download={`curbapp-${project?.id ?? "enhanced"}.png`}>
