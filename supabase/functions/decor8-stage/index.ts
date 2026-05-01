@@ -238,8 +238,17 @@ Deno.serve(async (req) => {
   }
 });
 
-function buildFallbackPrompt(style: string, room: string, extra: string) {
-  const base = `Virtually stage this empty ${room.replace(/_/g, " ")} in a tasteful ${style} style appropriate for a high-end real estate listing. Add furniture, rug, lighting, and tasteful decor — only what naturally fits. Match perspective, scale, and existing lighting. Photoreal, MLS-ready.`;
+function buildFallbackPrompt(style: string, room: string, extra: string, enhancementType?: string) {
+  const isKitchen = enhancementType === "kitchen_remodel";
+  const isBathroom = enhancementType === "bathroom_remodel";
+  let base: string;
+  if (isKitchen) {
+    base = `Remodel this kitchen in a ${style} style for a high-end real estate listing. Update cabinetry, countertops, backsplash, hardware, lighting, and flooring while preserving the room's layout, window/door positions, and overall perspective. Photoreal, MLS-ready.`;
+  } else if (isBathroom) {
+    base = `Remodel this bathroom in a ${style} style for a high-end real estate listing. Update tile, vanity, shower/tub, fixtures, lighting, and flooring while preserving the room's layout, window/door positions, and overall perspective. Photoreal, MLS-ready.`;
+  } else {
+    base = `Virtually stage this empty ${room.replace(/_/g, " ")} in a tasteful ${style} style appropriate for a high-end real estate listing. Add furniture, rug, lighting, and tasteful decor — only what naturally fits. Match perspective, scale, and existing lighting. Photoreal, MLS-ready.`;
+  }
   return extra.trim() ? `${base} Additional direction: ${extra.trim()}` : base;
 }
 
