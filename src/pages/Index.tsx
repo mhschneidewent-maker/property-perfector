@@ -122,7 +122,7 @@ const Index = () => {
           </p>
         </div>
 
-        <div className="mt-12 grid gap-10 md:grid-cols-2">
+        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {ENHANCEMENTS.map((e, i) => {
             const ex = EXAMPLES[e.key];
             return (
@@ -138,13 +138,13 @@ const Index = () => {
                   className="aspect-[4/3]"
                   afterLabel={e.label}
                 />
-                <div className="mt-4 flex items-start gap-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-gradient-primary shadow-glow">
-                    <e.icon className="h-4 w-4 text-primary-foreground" />
+                <div className="mt-3 flex items-start gap-2">
+                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-primary shadow-glow">
+                    <e.icon className="h-3.5 w-3.5 text-primary-foreground" />
                   </div>
                   <div>
-                    <h3 className="font-display text-lg font-semibold">{e.label}</h3>
-                    <p className="text-sm text-muted-foreground">{e.description}</p>
+                    <h3 className="font-display text-sm font-semibold">{e.label}</h3>
+                    <p className="text-xs text-muted-foreground">{e.description}</p>
                   </div>
                 </div>
               </div>
