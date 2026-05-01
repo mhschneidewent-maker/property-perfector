@@ -197,7 +197,7 @@ const Studio = () => {
         setStagingResults([]);
       }
 
-      const fnName = isStaging ? "decor8-stage" : "enhance-photo";
+      const fnName = isDecor8 ? "decor8-stage" : "enhance-photo";
       const { error: fnErr } = await supabase.functions.invoke(fnName, { body: { projectId: proj!.id } });
       if (fnErr) throw fnErr;
     } catch (err: any) {
@@ -208,7 +208,7 @@ const Studio = () => {
 
   const isProcessing = working || project?.status === "processing";
   const beforeSrc = originalUrl || previewUrl;
-  const showStagingGallery = isStaging && stagingResults.length > 0;
+  const showStagingGallery = isDecor8 && stagingResults.length > 0;
 
   return (
     <div className="min-h-screen bg-hero">
