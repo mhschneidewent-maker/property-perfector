@@ -163,8 +163,9 @@ const Studio = () => {
     setWorking(true);
     try {
       let proj = project;
-      const stagingFields = isStaging
-        ? { style, room_type: roomType, prompt: prompt.trim() || null, num_variations: numVariations, provider: "decor8" }
+      const effectiveRoom = isKitchenRemodel ? "kitchen" : isBathroomRemodel ? "bathroom" : roomType;
+      const stagingFields = isDecor8
+        ? { style, room_type: effectiveRoom, prompt: prompt.trim() || null, num_variations: numVariations, provider: "decor8" }
         : { provider: "lovable" };
 
       if (!proj && file) {
