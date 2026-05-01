@@ -101,6 +101,10 @@ Deno.serve(async (req) => {
         const decor8Style = STYLE_MAP[styleKey] ?? "modern";
         const decor8Room = ROOM_MAP[roomKey] ?? "livingroom";
 
+        const isRemodel =
+          project.enhancement_type === "kitchen_remodel" ||
+          project.enhancement_type === "bathroom_remodel";
+
         const payload: Record<string, unknown> = {
           input_image_url: inputUrl,
           room_type: decor8Room,
@@ -109,7 +113,11 @@ Deno.serve(async (req) => {
           num_captions: 0,
           keep_original_dimensions: false,
         };
-        if (userPrompt.trim()) payload.prompt = userPrompt.trim();
+        const remodelHint = isRemodel
+          ? `Full ${project.enhancement_type === "kitchen_remodel" ? "kitchen" : "bathroom"} remodel: replace dated finishes, cabinetry/vanity, countertops, tile, fixtures, and lighting in a ${decor8Style} style. Preserve room layout and perspective.`
+          : "";
+        const combinedPrompt = [remodelHint, userPrompt.trim()].filter(Boolean).join(" ");
+        if (combinedPrompt) payload.prompt = combinedPrompt;
 
         const res = await fetch("https://api.decor8.ai/generate_designs_for_room", {
           method: "POST",
@@ -179,7 +187,7 @@ Deno.serve(async (req) => {
         return json({ error: lastError || "Staging failed" }, 500);
       }
 
-      const fbPrompt = buildFallbackPrompt(styleKey, roomKey, userPrompt);
+      const fbPrompt = buildFallbackPrompt(styleKey, roomKey, userPrompt, project.enhancement_type);
       const blob = await admin.storage.from("photos").download(project.original_path);
       if (blob.error || !blob.data) {
         await admin.from("projects").update({ status: "failed", error_message: "Could not read original" }).eq("id", projectId);
@@ -238,8 +246,17 @@ Deno.serve(async (req) => {
   }
 });
 
-function buildFallbackPrompt(style: string, room: string, extra: string) {
-  const base = `Virtually stage this empty ${room.replace(/_/g, " ")} in a tasteful ${style} style appropriate for a high-end real estate listing. Add furniture, rug, lighting, and tasteful decor — only what naturally fits. Match perspective, scale, and existing lighting. Photoreal, MLS-ready.`;
+function buildFallbackPrompt(style: string, room: string, extra: string, enhancementType?: string) {
+  const isKitchen = enhancementType === "kitchen_remodel";
+  const isBathroom = enhancementType === "bathroom_remodel";
+  let base: string;
+  if (isKitchen) {
+    base = `Remodel this kitchen in a ${style} style for a high-end real estate listing. Update cabinetry, countertops, backsplash, hardware, lighting, and flooring while preserving the room's layout, window/door positions, and overall perspective. Photoreal, MLS-ready.`;
+  } else if (isBathroom) {
+    base = `Remodel this bathroom in a ${style} style for a high-end real estate listing. Update tile, vanity, shower/tub, fixtures, lighting, and flooring while preserving the room's layout, window/door positions, and overall perspective. Photoreal, MLS-ready.`;
+  } else {
+    base = `Virtually stage this empty ${room.replace(/_/g, " ")} in a tasteful ${style} style appropriate for a high-end real estate listing. Add furniture, rug, lighting, and tasteful decor — only what naturally fits. Match perspective, scale, and existing lighting. Photoreal, MLS-ready.`;
+  }
   return extra.trim() ? `${base} Additional direction: ${extra.trim()}` : base;
 }
 

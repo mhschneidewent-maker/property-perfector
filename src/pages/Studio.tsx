@@ -72,6 +72,9 @@ const Studio = () => {
   const [stagingResults, setStagingResults] = useState<StagingResult[]>([]);
 
   const isStaging = enhancement === "virtual_stage";
+  const isKitchenRemodel = enhancement === "kitchen_remodel";
+  const isBathroomRemodel = enhancement === "bathroom_remodel";
+  const isDecor8 = isStaging || isKitchenRemodel || isBathroomRemodel;
   const estimatedCostUsd = useMemo(
     () => (numVariations * PRICE_PER_VARIATION_USD).toFixed(2),
     [numVariations]
@@ -160,8 +163,9 @@ const Studio = () => {
     setWorking(true);
     try {
       let proj = project;
-      const stagingFields = isStaging
-        ? { style, room_type: roomType, prompt: prompt.trim() || null, num_variations: numVariations, provider: "decor8" }
+      const effectiveRoom = isKitchenRemodel ? "kitchen" : isBathroomRemodel ? "bathroom" : roomType;
+      const stagingFields = isDecor8
+        ? { style, room_type: effectiveRoom, prompt: prompt.trim() || null, num_variations: numVariations, provider: "decor8" }
         : { provider: "lovable" };
 
       if (!proj && file) {
@@ -193,7 +197,7 @@ const Studio = () => {
         setStagingResults([]);
       }
 
-      const fnName = isStaging ? "decor8-stage" : "enhance-photo";
+      const fnName = isDecor8 ? "decor8-stage" : "enhance-photo";
       const { error: fnErr } = await supabase.functions.invoke(fnName, { body: { projectId: proj!.id } });
       if (fnErr) throw fnErr;
     } catch (err: any) {
@@ -204,7 +208,7 @@ const Studio = () => {
 
   const isProcessing = working || project?.status === "processing";
   const beforeSrc = originalUrl || previewUrl;
-  const showStagingGallery = isStaging && stagingResults.length > 0;
+  const showStagingGallery = isDecor8 && stagingResults.length > 0;
 
   return (
     <div className="min-h-screen bg-hero">
@@ -282,7 +286,7 @@ const Studio = () => {
               </label>
             )}
 
-            {!isStaging && enhancedUrl && (
+            {!isDecor8 && enhancedUrl && (
               <div className="mt-4 flex justify-end">
                 <Button variant="glass" asChild>
                   <a href={enhancedUrl} download={`curbapp-${project?.id ?? "enhanced"}.png`}>
@@ -324,20 +328,24 @@ const Studio = () => {
               })}
             </div>
 
-            {isStaging && (
+            {isDecor8 && (
               <div className="mt-6 space-y-4 rounded-xl border border-aqua/30 bg-aqua/5 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-aqua">Decor8 AI staging</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-aqua">
+                  {isKitchenRemodel ? "Decor8 AI kitchen remodel" : isBathroomRemodel ? "Decor8 AI bathroom remodel" : "Decor8 AI staging"}
+                </p>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">Room type</Label>
-                    <Select value={roomType} onValueChange={setRoomType} disabled={isProcessing}>
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {STAGING_ROOMS.map((r) => <SelectItem key={r.key} value={r.key}>{r.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className={`grid gap-3 ${isStaging ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {isStaging && (
+                    <div>
+                      <Label className="text-xs">Room type</Label>
+                      <Select value={roomType} onValueChange={setRoomType} disabled={isProcessing}>
+                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {STAGING_ROOMS.map((r) => <SelectItem key={r.key} value={r.key}>{r.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div>
                     <Label className="text-xs">Design style</Label>
                     <Select value={style} onValueChange={setStyle} disabled={isProcessing}>
@@ -355,7 +363,13 @@ const Studio = () => {
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     disabled={isProcessing}
-                    placeholder="e.g. warm wood tones, leather sofa, plants by the window"
+                    placeholder={
+                      isKitchenRemodel
+                        ? "e.g. white shaker cabinets, quartz counters, gold hardware, marble backsplash"
+                        : isBathroomRemodel
+                        ? "e.g. walk-in glass shower, marble tile, matte black fixtures, freestanding tub"
+                        : "e.g. warm wood tones, leather sofa, plants by the window"
+                    }
                     className="mt-1 min-h-[70px] text-sm"
                     maxLength={500}
                   />
@@ -383,7 +397,7 @@ const Studio = () => {
             )}
 
             <Button variant="hero" size="lg" className="mt-6 w-full" onClick={startEnhance} disabled={isProcessing || (!file && !project)}>
-              {isProcessing ? <><Loader2 className="h-4 w-4 animate-spin" /> {isStaging ? "Staging…" : "Enhancing…"}</> : <><Sparkles className="h-4 w-4" /> {isStaging ? `Generate ${numVariations} variation${numVariations > 1 ? "s" : ""}` : "Run enhancement"}</>}
+              {isProcessing ? <><Loader2 className="h-4 w-4 animate-spin" /> {isDecor8 ? "Generating…" : "Enhancing…"}</> : <><Sparkles className="h-4 w-4" /> {isDecor8 ? `Generate ${numVariations} variation${numVariations > 1 ? "s" : ""}` : "Run enhancement"}</>}
             </Button>
             {project?.status === "failed" && project.error_message && (
               <p className="mt-3 text-sm text-destructive">{project.error_message}</p>
