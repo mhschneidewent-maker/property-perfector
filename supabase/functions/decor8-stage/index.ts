@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
         return json({ error: lastError || "Staging failed" }, 500);
       }
 
-      const fbPrompt = buildFallbackPrompt(styleKey, roomKey, userPrompt);
+      const fbPrompt = buildFallbackPrompt(styleKey, roomKey, userPrompt, project.enhancement_type);
       const blob = await admin.storage.from("photos").download(project.original_path);
       if (blob.error || !blob.data) {
         await admin.from("projects").update({ status: "failed", error_message: "Could not read original" }).eq("id", projectId);
