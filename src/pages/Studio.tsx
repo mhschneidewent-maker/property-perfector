@@ -72,6 +72,9 @@ const Studio = () => {
   const [stagingResults, setStagingResults] = useState<StagingResult[]>([]);
 
   const isStaging = enhancement === "virtual_stage";
+  const isKitchenRemodel = enhancement === "kitchen_remodel";
+  const isBathroomRemodel = enhancement === "bathroom_remodel";
+  const isDecor8 = isStaging || isKitchenRemodel || isBathroomRemodel;
   const estimatedCostUsd = useMemo(
     () => (numVariations * PRICE_PER_VARIATION_USD).toFixed(2),
     [numVariations]
