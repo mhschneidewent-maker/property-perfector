@@ -328,20 +328,24 @@ const Studio = () => {
               })}
             </div>
 
-            {isStaging && (
+            {isDecor8 && (
               <div className="mt-6 space-y-4 rounded-xl border border-aqua/30 bg-aqua/5 p-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-aqua">Decor8 AI staging</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-aqua">
+                  {isKitchenRemodel ? "Decor8 AI kitchen remodel" : isBathroomRemodel ? "Decor8 AI bathroom remodel" : "Decor8 AI staging"}
+                </p>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">Room type</Label>
-                    <Select value={roomType} onValueChange={setRoomType} disabled={isProcessing}>
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {STAGING_ROOMS.map((r) => <SelectItem key={r.key} value={r.key}>{r.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className={`grid gap-3 ${isStaging ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {isStaging && (
+                    <div>
+                      <Label className="text-xs">Room type</Label>
+                      <Select value={roomType} onValueChange={setRoomType} disabled={isProcessing}>
+                        <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {STAGING_ROOMS.map((r) => <SelectItem key={r.key} value={r.key}>{r.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div>
                     <Label className="text-xs">Design style</Label>
                     <Select value={style} onValueChange={setStyle} disabled={isProcessing}>
@@ -359,7 +363,13 @@ const Studio = () => {
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     disabled={isProcessing}
-                    placeholder="e.g. warm wood tones, leather sofa, plants by the window"
+                    placeholder={
+                      isKitchenRemodel
+                        ? "e.g. white shaker cabinets, quartz counters, gold hardware, marble backsplash"
+                        : isBathroomRemodel
+                        ? "e.g. walk-in glass shower, marble tile, matte black fixtures, freestanding tub"
+                        : "e.g. warm wood tones, leather sofa, plants by the window"
+                    }
                     className="mt-1 min-h-[70px] text-sm"
                     maxLength={500}
                   />
@@ -387,7 +397,7 @@ const Studio = () => {
             )}
 
             <Button variant="hero" size="lg" className="mt-6 w-full" onClick={startEnhance} disabled={isProcessing || (!file && !project)}>
-              {isProcessing ? <><Loader2 className="h-4 w-4 animate-spin" /> {isStaging ? "Staging…" : "Enhancing…"}</> : <><Sparkles className="h-4 w-4" /> {isStaging ? `Generate ${numVariations} variation${numVariations > 1 ? "s" : ""}` : "Run enhancement"}</>}
+              {isProcessing ? <><Loader2 className="h-4 w-4 animate-spin" /> {isDecor8 ? "Generating…" : "Enhancing…"}</> : <><Sparkles className="h-4 w-4" /> {isDecor8 ? `Generate ${numVariations} variation${numVariations > 1 ? "s" : ""}` : "Run enhancement"}</>}
             </Button>
             {project?.status === "failed" && project.error_message && (
               <p className="mt-3 text-sm text-destructive">{project.error_message}</p>
