@@ -101,6 +101,10 @@ Deno.serve(async (req) => {
         const decor8Style = STYLE_MAP[styleKey] ?? "modern";
         const decor8Room = ROOM_MAP[roomKey] ?? "livingroom";
 
+        const isRemodel =
+          project.enhancement_type === "kitchen_remodel" ||
+          project.enhancement_type === "bathroom_remodel";
+
         const payload: Record<string, unknown> = {
           input_image_url: inputUrl,
           room_type: decor8Room,
@@ -109,7 +113,11 @@ Deno.serve(async (req) => {
           num_captions: 0,
           keep_original_dimensions: false,
         };
-        if (userPrompt.trim()) payload.prompt = userPrompt.trim();
+        const remodelHint = isRemodel
+          ? `Full ${project.enhancement_type === "kitchen_remodel" ? "kitchen" : "bathroom"} remodel: replace dated finishes, cabinetry/vanity, countertops, tile, fixtures, and lighting in a ${decor8Style} style. Preserve room layout and perspective.`
+          : "";
+        const combinedPrompt = [remodelHint, userPrompt.trim()].filter(Boolean).join(" ");
+        if (combinedPrompt) payload.prompt = combinedPrompt;
 
         const res = await fetch("https://api.decor8.ai/generate_designs_for_room", {
           method: "POST",
