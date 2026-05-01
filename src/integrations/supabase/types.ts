@@ -45,8 +45,13 @@ export type Database = {
           enhancement_type: string
           error_message: string | null
           id: string
+          num_variations: number
           original_path: string
+          prompt: string | null
+          provider: string
+          room_type: string | null
           status: string
+          style: string | null
           title: string | null
           updated_at: string
           user_id: string
@@ -57,8 +62,13 @@ export type Database = {
           enhancement_type: string
           error_message?: string | null
           id?: string
+          num_variations?: number
           original_path: string
+          prompt?: string | null
+          provider?: string
+          room_type?: string | null
           status?: string
+          style?: string | null
           title?: string | null
           updated_at?: string
           user_id: string
@@ -69,13 +79,56 @@ export type Database = {
           enhancement_type?: string
           error_message?: string | null
           id?: string
+          num_variations?: number
           original_path?: string
+          prompt?: string | null
+          provider?: string
+          room_type?: string | null
           status?: string
+          style?: string | null
           title?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: []
+      }
+      staging_results: {
+        Row: {
+          created_at: string
+          id: string
+          image_path: string
+          project_id: string
+          provider: string
+          user_id: string
+          variation_index: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_path: string
+          project_id: string
+          provider?: string
+          user_id: string
+          variation_index: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_path?: string
+          project_id?: string
+          provider?: string
+          user_id?: string
+          variation_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staging_results_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
