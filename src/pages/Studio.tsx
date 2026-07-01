@@ -430,6 +430,7 @@ const Studio = () => {
             )}
           </aside>
         </div>
+        )}
       </main>
     </div>
   );
