@@ -220,6 +220,30 @@ const Studio = () => {
           <Link to="/dashboard"><ArrowLeft className="mr-1 h-4 w-4" />Back to dashboard</Link>
         </Button>
 
+        {!projectId && (
+          <div className="mb-6 inline-flex rounded-lg border border-border bg-card/40 p-1">
+            <button
+              onClick={() => setMode("single")}
+              className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                mode === "single" ? "bg-gradient-primary text-primary-foreground shadow-glow" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <ImageIcon className="h-4 w-4" /> Single photo
+            </button>
+            <button
+              onClick={() => setMode("batch")}
+              className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                mode === "batch" ? "bg-gradient-primary text-primary-foreground shadow-glow" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Layers className="h-4 w-4" /> Batch
+            </button>
+          </div>
+        )}
+
+        {mode === "batch" && !projectId ? (
+          <BatchStudio />
+        ) : (
         <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
           {/* Preview / Gallery */}
           <div className="rounded-2xl border border-border bg-gradient-card p-4 shadow-card">
