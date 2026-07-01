@@ -56,6 +56,7 @@ const Studio = () => {
   const [params] = useSearchParams();
   const projectId = params.get("project");
   const navigate = useNavigate();
+  const [mode, setMode] = useState<"single" | "batch">(projectId ? "single" : "single");
 
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
