@@ -10,8 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ENHANCEMENTS, EnhancementKey } from "@/lib/enhancements";
-import { ArrowLeft, Download, Loader2, Sparkles, Upload } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Sparkles, Upload, Image as ImageIcon, Layers } from "lucide-react";
 import { toast } from "sonner";
+import { BatchStudio } from "@/components/BatchStudio";
 
 const MAX_BYTES = 15 * 1024 * 1024;
 const ALLOWED = ["image/jpeg", "image/png", "image/webp"];
