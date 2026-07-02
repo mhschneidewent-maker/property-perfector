@@ -1,4 +1,4 @@
-import { Sun, Cloud, Sparkles, Trees, Sofa, Flame, Car, Wand2, ChefHat, Bath } from "lucide-react";
+import { Sun, Cloud, Sparkles, Trees, Sofa, Flame, Car, Wand2 } from "lucide-react";
 
 export type EnhancementKey =
   | "twilight"
@@ -23,8 +23,6 @@ export const ENHANCEMENTS: {
   { key: "green_grass", label: "Green Grass", description: "Lush, healthy lawn — no brown patches", icon: Trees },
   { key: "declutter", label: "Declutter Room", description: "Remove personal items and visual noise", icon: Wand2 },
   { key: "virtual_stage", label: "Virtual Staging", description: "Furnish empty rooms with modern decor", icon: Sofa },
-  { key: "kitchen_remodel", label: "AI Kitchen Remodel", description: "Reimagine dated kitchens with modern finishes", icon: ChefHat },
-  { key: "bathroom_remodel", label: "AI Bathroom Remodel", description: "Transform tired bathrooms into spa-like spaces", icon: Bath },
   { key: "brighten", label: "Brighten & HDR", description: "Pro color correction, lift shadows", icon: Sparkles },
   { key: "remove_cars", label: "Remove Cars & Clutter", description: "Clean exterior shots, remove vehicles", icon: Car },
   { key: "fireplace_on", label: "Light the Fireplace", description: "Add a warm, glowing fire", icon: Flame },
