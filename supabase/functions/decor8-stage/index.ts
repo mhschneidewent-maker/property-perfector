@@ -96,6 +96,8 @@ Deno.serve(async (req) => {
     let lastError = "";
 
     // ---- Try Decor8 first ----
+    // Decor8's /generate_designs_for_room returns 1 image per call regardless of
+    // `num_images`, so we call it N times in parallel to get all variations.
     if (DECOR8_API_KEY) {
       try {
         const decor8Style = STYLE_MAP[styleKey] ?? "modern";
@@ -105,69 +107,77 @@ Deno.serve(async (req) => {
           project.enhancement_type === "kitchen_remodel" ||
           project.enhancement_type === "bathroom_remodel";
 
-        const payload: Record<string, unknown> = {
-          input_image_url: inputUrl,
-          room_type: decor8Room,
-          design_style: decor8Style,
-          num_images: numVariations,
-          num_captions: 0,
-          keep_original_dimensions: false,
-        };
         const remodelHint = isRemodel
           ? `Full ${project.enhancement_type === "kitchen_remodel" ? "kitchen" : "bathroom"} remodel: replace dated finishes, cabinetry/vanity, countertops, tile, fixtures, and lighting in a ${decor8Style} style. Preserve room layout and perspective.`
           : "";
         const combinedPrompt = [remodelHint, userPrompt.trim()].filter(Boolean).join(" ");
-        if (combinedPrompt) payload.prompt = combinedPrompt;
 
-        const res = await fetch("https://api.decor8.ai/generate_designs_for_room", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${DECOR8_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!res.ok) {
-          lastError = `Decor8 ${res.status}: ${(await res.text()).slice(0, 200)}`;
-        } else {
+        const callDecor8 = async (): Promise<string | null> => {
+          const payload: Record<string, unknown> = {
+            input_image_url: inputUrl,
+            room_type: decor8Room,
+            design_style: decor8Style,
+            num_images: 1,
+            num_captions: 0,
+            keep_original_dimensions: false,
+          };
+          if (combinedPrompt) payload.prompt = combinedPrompt;
+          const res = await fetch("https://api.decor8.ai/generate_designs_for_room", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${DECOR8_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) {
+            lastError = `Decor8 ${res.status}: ${(await res.text()).slice(0, 200)}`;
+            return null;
+          }
           const j = await res.json();
-          // Decor8 returns { info: { images: [{ url, ... }] } } in most variants
           const images: any[] =
-            j?.info?.images ??
-            j?.images ??
-            j?.output?.images ??
-            [];
-          let idx = 0;
-          for (const img of images.slice(0, numVariations)) {
-            const url: string | undefined = img?.url ?? img?.image_url ?? img;
-            if (!url || typeof url !== "string") continue;
-            try {
-              const imgRes = await fetch(url);
-              if (!imgRes.ok) continue;
-              const bytes = new Uint8Array(await imgRes.arrayBuffer());
-              const ct = imgRes.headers.get("content-type") || "image/jpeg";
-              const ext = ct.includes("png") ? "png" : "jpg";
-              const path = `${userId}/staging/${projectId}/decor8_${idx}.${ext}`;
-              const { error: upErr } = await admin.storage
-                .from("photos")
-                .upload(path, bytes, { contentType: ct, upsert: true });
-              if (upErr) { lastError = upErr.message; continue; }
-              await admin.from("staging_results").insert({
-                project_id: projectId,
-                user_id: userId,
-                image_path: path,
-                variation_index: idx,
-                provider: "decor8",
-              });
-              if (idx === 0) {
-                await admin.from("projects").update({ enhanced_path: path }).eq("id", projectId);
-              }
-              savedCount++;
-              idx++;
-            } catch (e) {
-              lastError = e instanceof Error ? e.message : "image fetch failed";
+            j?.info?.images ?? j?.images ?? j?.output?.images ?? [];
+          const first = images[0];
+          const url: string | undefined = first?.url ?? first?.image_url ?? first;
+          return typeof url === "string" ? url : null;
+        };
+
+        // Fire N calls in parallel
+        const urls = await Promise.all(
+          Array.from({ length: numVariations }, () => callDecor8().catch((e) => {
+            lastError = e instanceof Error ? e.message : "Decor8 call failed";
+            return null;
+          })),
+        );
+
+        let idx = 0;
+        for (const url of urls) {
+          if (!url) continue;
+          try {
+            const imgRes = await fetch(url);
+            if (!imgRes.ok) continue;
+            const bytes = new Uint8Array(await imgRes.arrayBuffer());
+            const ct = imgRes.headers.get("content-type") || "image/jpeg";
+            const ext = ct.includes("png") ? "png" : "jpg";
+            const path = `${userId}/staging/${projectId}/decor8_${idx}.${ext}`;
+            const { error: upErr } = await admin.storage
+              .from("photos")
+              .upload(path, bytes, { contentType: ct, upsert: true });
+            if (upErr) { lastError = upErr.message; continue; }
+            await admin.from("staging_results").insert({
+              project_id: projectId,
+              user_id: userId,
+              image_path: path,
+              variation_index: idx,
+              provider: "decor8",
+            });
+            if (idx === 0) {
+              await admin.from("projects").update({ enhanced_path: path }).eq("id", projectId);
             }
+            savedCount++;
+            idx++;
+          } catch (e) {
+            lastError = e instanceof Error ? e.message : "image fetch failed";
           }
         }
       } catch (e) {
