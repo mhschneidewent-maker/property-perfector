@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
           : "";
         const combinedPrompt = [remodelHint, userPrompt.trim()].filter(Boolean).join(" ");
 
-        const callDecor8 = async (): Promise<string | null> => {
+        const callDecor8 = async (attempt: number): Promise<string | null> => {
           const payload: Record<string, unknown> = {
             input_image_url: inputUrl,
             room_type: decor8Room,
@@ -122,6 +122,7 @@ Deno.serve(async (req) => {
             keep_original_dimensions: false,
           };
           if (combinedPrompt) payload.prompt = combinedPrompt;
+          console.log(`[decor8] call #${attempt} payload:`, JSON.stringify(payload));
           const res = await fetch("https://api.decor8.ai/generate_designs_for_room", {
             method: "POST",
             headers: {
@@ -130,25 +131,34 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify(payload),
           });
+          const text = await res.text();
           if (!res.ok) {
-            lastError = `Decor8 ${res.status}: ${(await res.text()).slice(0, 200)}`;
+            lastError = `Decor8 ${res.status}: ${text.slice(0, 300)}`;
+            console.error(`[decor8] call #${attempt} failed:`, lastError);
             return null;
           }
-          const j = await res.json();
-          const images: any[] =
-            j?.info?.images ?? j?.images ?? j?.output?.images ?? [];
+          let j: any = {};
+          try { j = JSON.parse(text); } catch { console.error(`[decor8] non-JSON response #${attempt}:`, text.slice(0, 300)); }
+          const images: any[] = j?.info?.images ?? j?.images ?? j?.output?.images ?? [];
+          console.log(`[decor8] call #${attempt} returned ${images.length} image(s)`);
           const first = images[0];
           const url: string | undefined = first?.url ?? first?.image_url ?? first;
           return typeof url === "string" ? url : null;
         };
 
-        // Fire N calls in parallel
-        const urls = await Promise.all(
-          Array.from({ length: numVariations }, () => callDecor8().catch((e) => {
+        // Run sequentially to avoid Decor8 rate-limit / concurrency issues.
+        const urls: (string | null)[] = [];
+        for (let i = 0; i < numVariations; i++) {
+          try {
+            urls.push(await callDecor8(i + 1));
+          } catch (e) {
             lastError = e instanceof Error ? e.message : "Decor8 call failed";
-            return null;
-          })),
-        );
+            console.error(`[decor8] call #${i + 1} threw:`, lastError);
+            urls.push(null);
+          }
+        }
+        console.log(`[decor8] collected ${urls.filter(Boolean).length}/${numVariations} URLs`);
+
 
         let idx = 0;
         for (const url of urls) {
