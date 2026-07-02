@@ -308,7 +308,7 @@ function json(data: unknown, status = 200) {
 }
 
 async function uploadToPhotosWithRetry(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   path: string,
   bytes: Uint8Array,
   contentType: string,
