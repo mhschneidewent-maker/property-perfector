@@ -277,6 +277,132 @@ Deno.serve(async (req) => {
   }
 });
 
+async function generateFallbackVariation(params: {
+  admin: any;
+  lovableApiKey: string;
+  dataUrl: string;
+  styleKey: string;
+  roomKey: string;
+  userPrompt: string;
+  enhancementType?: string;
+  userId: string;
+  projectId: string;
+  variationIndex: number;
+}): Promise<{ ok: true; variationIndex: number; path: string } | { ok: false; variationIndex: number; error: string }> {
+  const {
+    admin,
+    lovableApiKey,
+    dataUrl,
+    styleKey,
+    roomKey,
+    userPrompt,
+    enhancementType,
+    userId,
+    projectId,
+    variationIndex,
+  } = params;
+
+  try {
+    const fbPrompt = buildFallbackPrompt(styleKey, roomKey, userPrompt, enhancementType, variationIndex + 1);
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image",
+        modalities: ["image", "text"],
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: fbPrompt },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        }],
+      }),
+    });
+    if (!aiRes.ok) {
+      const errorText = await aiRes.text().catch(() => "");
+      return {
+        ok: false,
+        variationIndex,
+        error: `Fallback failed (${aiRes.status}) ${errorText.slice(0, 160)}`.trim(),
+      };
+    }
+
+    const j = await aiRes.json();
+    const outUrl: string | undefined = j?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!outUrl?.startsWith("data:")) {
+      return { ok: false, variationIndex, error: "No image returned" };
+    }
+
+    const [meta, payload] = outUrl.split(",");
+    const outMime = /data:(.*?);base64/.exec(meta)?.[1] ?? "image/png";
+    const ext = outMime.includes("png") ? "png" : "jpg";
+    const outBytes = b64decode(payload);
+    const path = `${userId}/staging/${projectId}/fallback_${variationIndex}.${ext}`;
+    const uploadErr = await uploadToPhotosWithRetry(
+      admin,
+      path,
+      outBytes,
+      outMime,
+      `fallback variation #${variationIndex + 1}`,
+    );
+    if (uploadErr) {
+      return { ok: false, variationIndex, error: uploadErr.message };
+    }
+
+    const { error: insertErr } = await admin.from("staging_results").insert({
+      project_id: projectId,
+      user_id: userId,
+      image_path: path,
+      variation_index: variationIndex,
+      provider: "lovable",
+    });
+    if (insertErr) {
+      return { ok: false, variationIndex, error: insertErr.message ?? "Could not save variation" };
+    }
+
+    return { ok: true, variationIndex, path };
+  } catch (e) {
+    return { ok: false, variationIndex, error: e instanceof Error ? e.message : "Fallback variation failed" };
+  }
+}
+
+async function getUsedVariationIndexes(admin: any, projectId: string): Promise<Set<number>> {
+  const { data } = await admin
+    .from("staging_results")
+    .select("variation_index")
+    .eq("project_id", projectId);
+  return new Set((data ?? []).map((row: { variation_index: number }) => row.variation_index));
+}
+
+async function countStagingResults(admin: any, projectId: string): Promise<number> {
+  const { count } = await admin
+    .from("staging_results")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", projectId);
+  return count ?? 0;
+}
+
+async function ensureEnhancedPath(admin: any, projectId: string) {
+  const { data: project } = await admin
+    .from("projects")
+    .select("enhanced_path")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (project?.enhanced_path) return;
+
+  const { data: first } = await admin
+    .from("staging_results")
+    .select("image_path")
+    .eq("project_id", projectId)
+    .order("variation_index", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (first?.image_path) {
+    await admin.from("projects").update({ enhanced_path: first.image_path }).eq("id", projectId);
+  }
+}
+
 function buildFallbackPrompt(style: string, room: string, extra: string, enhancementType?: string, variationNumber = 1) {
   const isKitchen = enhancementType === "kitchen_remodel";
   const isBathroom = enhancementType === "bathroom_remodel";
