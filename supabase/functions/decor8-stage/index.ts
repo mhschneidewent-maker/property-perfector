@@ -170,9 +170,7 @@ Deno.serve(async (req) => {
             const ct = imgRes.headers.get("content-type") || "image/jpeg";
             const ext = ct.includes("png") ? "png" : "jpg";
             const path = `${userId}/staging/${projectId}/decor8_${idx}.${ext}`;
-            const { error: upErr } = await admin.storage
-              .from("photos")
-              .upload(path, bytes, { contentType: ct, upsert: true });
+            const upErr = await uploadToPhotosWithRetry(admin, path, bytes, ct, `decor8 variation #${idx + 1}`);
             if (upErr) { lastError = upErr.message; continue; }
             await admin.from("staging_results").insert({
               project_id: projectId,
@@ -254,11 +252,11 @@ Deno.serve(async (req) => {
         const ext = outMime.includes("png") ? "png" : "jpg";
         const outBytes = b64decode(payload);
         const path = `${userId}/staging/${projectId}/fallback_${variationIndex}.${ext}`;
-        const { error: uploadErr } = await admin.storage.from("photos").upload(path, outBytes, { contentType: outMime, upsert: true });
+        const uploadErr = await uploadToPhotosWithRetry(admin, path, outBytes, outMime, `fallback variation #${variationIndex + 1}`);
         if (uploadErr) {
           lastError = uploadErr.message;
           console.error(`[lovable-fallback] variation #${variationIndex + 1} upload failed:`, lastError);
-          break;
+          continue;
         }
         await admin.from("staging_results").insert({
           project_id: projectId, user_id: userId, image_path: path, variation_index: variationIndex, provider: "lovable",
@@ -308,6 +306,36 @@ function json(data: unknown, status = 200) {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
+
+async function uploadToPhotosWithRetry(
+  admin: ReturnType<typeof createClient>,
+  path: string,
+  bytes: Uint8Array,
+  contentType: string,
+  label: string,
+): Promise<{ message: string } | null> {
+  let lastMessage = "Upload failed";
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      const { error } = await admin.storage
+        .from("photos")
+        .upload(path, bytes, { contentType, upsert: true });
+      if (!error) return null;
+      lastMessage = error.message;
+    } catch (e) {
+      lastMessage = e instanceof Error ? e.message : "Upload connection failed";
+    }
+
+    console.error(`[storage-upload] ${label} attempt ${attempt} failed:`, lastMessage);
+    if (attempt < 4) await delay(800 * attempt);
+  }
+  return { message: `Storage upload failed after retries: ${lastMessage}` };
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function b64encode(bytes: Uint8Array): string {
   let s = ""; const C = 0x8000;
   for (let i = 0; i < bytes.length; i += C) s += String.fromCharCode(...bytes.subarray(i, i + C));
