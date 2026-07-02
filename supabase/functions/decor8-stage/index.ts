@@ -197,8 +197,8 @@ Deno.serve(async (req) => {
       lastError = "DECOR8_API_KEY not configured";
     }
 
-    // ---- Fallback: Lovable AI single image ----
-    if (savedCount === 0) {
+    // ---- Fallback: Lovable AI fills any missing variations ----
+    if (savedCount < numVariations) {
       if (!LOVABLE_API_KEY) {
         await admin
           .from("projects")
@@ -207,7 +207,6 @@ Deno.serve(async (req) => {
         return json({ error: lastError || "Staging failed" }, 500);
       }
 
-      const fbPrompt = buildFallbackPrompt(styleKey, roomKey, userPrompt, project.enhancement_type);
       const blob = await admin.storage.from("photos").download(project.original_path);
       if (blob.error || !blob.data) {
         await admin.from("projects").update({ status: "failed", error_message: "Could not read original" }).eq("id", projectId);
@@ -216,42 +215,64 @@ Deno.serve(async (req) => {
       const buf = new Uint8Array(await blob.data.arrayBuffer());
       const dataUrl = `data:${blob.data.type || "image/jpeg"};base64,${b64encode(buf)}`;
 
-      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-image",
-          modalities: ["image", "text"],
-          messages: [{
-            role: "user",
-            content: [
-              { type: "text", text: fbPrompt },
-              { type: "image_url", image_url: { url: dataUrl } },
-            ],
-          }],
-        }),
-      });
-      if (!aiRes.ok) {
-        await admin.from("projects").update({ status: "failed", error_message: `Fallback failed (${aiRes.status})` }).eq("id", projectId);
-        return json({ error: "fallback ai failed" }, 500);
+      const missingCount = numVariations - savedCount;
+      const startingIndex = savedCount;
+
+      for (let i = 0; i < missingCount; i++) {
+        const variationIndex = startingIndex + i;
+        const fbPrompt = buildFallbackPrompt(styleKey, roomKey, userPrompt, project.enhancement_type, variationIndex + 1);
+        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-image",
+            modalities: ["image", "text"],
+            messages: [{
+              role: "user",
+              content: [
+                { type: "text", text: fbPrompt },
+                { type: "image_url", image_url: { url: dataUrl } },
+              ],
+            }],
+          }),
+        });
+        if (!aiRes.ok) {
+          const errorText = await aiRes.text().catch(() => "");
+          lastError = `Fallback failed (${aiRes.status}) ${errorText.slice(0, 160)}`.trim();
+          console.error(`[lovable-fallback] variation #${variationIndex + 1} failed:`, lastError);
+          break;
+        }
+        const j = await aiRes.json();
+        const outUrl: string | undefined = j?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+        if (!outUrl?.startsWith("data:")) {
+          lastError = "No image returned";
+          console.error(`[lovable-fallback] variation #${variationIndex + 1} returned no image`);
+          break;
+        }
+        const [meta, payload] = outUrl.split(",");
+        const outMime = /data:(.*?);base64/.exec(meta)?.[1] ?? "image/png";
+        const ext = outMime.includes("png") ? "png" : "jpg";
+        const outBytes = b64decode(payload);
+        const path = `${userId}/staging/${projectId}/fallback_${variationIndex}.${ext}`;
+        const { error: uploadErr } = await admin.storage.from("photos").upload(path, outBytes, { contentType: outMime, upsert: true });
+        if (uploadErr) {
+          lastError = uploadErr.message;
+          console.error(`[lovable-fallback] variation #${variationIndex + 1} upload failed:`, lastError);
+          break;
+        }
+        await admin.from("staging_results").insert({
+          project_id: projectId, user_id: userId, image_path: path, variation_index: variationIndex, provider: "lovable",
+        });
+        if (variationIndex === 0) {
+          await admin.from("projects").update({ enhanced_path: path }).eq("id", projectId);
+        }
+        savedCount++;
       }
-      const j = await aiRes.json();
-      const outUrl: string | undefined = j?.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-      if (!outUrl?.startsWith("data:")) {
-        await admin.from("projects").update({ status: "failed", error_message: "No image returned" }).eq("id", projectId);
-        return json({ error: "no image" }, 500);
+
+      if (savedCount === 0) {
+        await admin.from("projects").update({ status: "failed", error_message: lastError || "No image returned" }).eq("id", projectId);
+        return json({ error: lastError || "no image" }, 500);
       }
-      const [meta, payload] = outUrl.split(",");
-      const outMime = /data:(.*?);base64/.exec(meta)?.[1] ?? "image/png";
-      const ext = outMime.includes("png") ? "png" : "jpg";
-      const outBytes = b64decode(payload);
-      const path = `${userId}/staging/${projectId}/fallback_0.${ext}`;
-      await admin.storage.from("photos").upload(path, outBytes, { contentType: outMime, upsert: true });
-      await admin.from("staging_results").insert({
-        project_id: projectId, user_id: userId, image_path: path, variation_index: 0, provider: "lovable",
-      });
-      await admin.from("projects").update({ enhanced_path: path }).eq("id", projectId);
-      savedCount = 1;
     }
 
     await admin
@@ -266,7 +287,7 @@ Deno.serve(async (req) => {
   }
 });
 
-function buildFallbackPrompt(style: string, room: string, extra: string, enhancementType?: string) {
+function buildFallbackPrompt(style: string, room: string, extra: string, enhancementType?: string, variationNumber = 1) {
   const isKitchen = enhancementType === "kitchen_remodel";
   const isBathroom = enhancementType === "bathroom_remodel";
   let base: string;
@@ -277,7 +298,8 @@ function buildFallbackPrompt(style: string, room: string, extra: string, enhance
   } else {
     base = `Virtually stage this empty ${room.replace(/_/g, " ")} in a tasteful ${style} style appropriate for a high-end real estate listing. Add furniture, rug, lighting, and tasteful decor — only what naturally fits. Match perspective, scale, and existing lighting. Photoreal, MLS-ready.`;
   }
-  return extra.trim() ? `${base} Additional direction: ${extra.trim()}` : base;
+  const variation = `Create variation ${variationNumber} with a distinct furniture layout, decor selection, color accents, and styling details from the other variations while keeping the same room, perspective, and photoreal real-estate quality.`;
+  return [base, variation, extra.trim() ? `Additional direction: ${extra.trim()}` : ""].filter(Boolean).join(" ");
 }
 
 function json(data: unknown, status = 200) {
