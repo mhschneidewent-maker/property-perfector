@@ -22,19 +22,12 @@ import carsBefore from "@/assets/ex-cars-before.jpg";
 import carsAfter from "@/assets/ex-cars-after.jpg";
 import fireBefore from "@/assets/ex-fire-before.jpg";
 import fireAfter from "@/assets/ex-fire-after.jpg";
-import kitchenBefore from "@/assets/ex-kitchen-before.jpg";
-import kitchenAfter from "@/assets/ex-kitchen-after.jpg";
-import bathroomBefore from "@/assets/ex-bathroom-before.jpg";
-import bathroomAfter from "@/assets/ex-bathroom-after.jpg";
-
-const EXAMPLES: Record<EnhancementKey, { before: string; after: string }> = {
+const EXAMPLES: Partial<Record<EnhancementKey, { before: string; after: string }>> = {
   twilight: { before: beforeImg, after: afterImg },
   sky_replace: { before: skyBefore, after: skyAfter },
   green_grass: { before: grassBefore, after: grassAfter },
   declutter: { before: declutterBefore, after: declutterAfter },
   virtual_stage: { before: stageBefore, after: stageAfter },
-  kitchen_remodel: { before: kitchenBefore, after: kitchenAfter },
-  bathroom_remodel: { before: bathroomBefore, after: bathroomAfter },
   brighten: { before: brightBefore, after: brightAfter },
   remove_cars: { before: carsBefore, after: carsAfter },
   fireplace_on: { before: fireBefore, after: fireAfter },

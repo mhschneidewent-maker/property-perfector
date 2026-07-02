@@ -6,6 +6,8 @@ export type EnhancementKey =
   | "green_grass"
   | "declutter"
   | "virtual_stage"
+  | "kitchen_remodel"
+  | "bathroom_remodel"
   | "brighten"
   | "remove_cars"
   | "fireplace_on";
